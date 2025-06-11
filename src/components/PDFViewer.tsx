@@ -1,13 +1,22 @@
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
+import { Document, Page, pdfjs } from 'react-pdf';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Printer } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
+// Set up PDF.js worker
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
+
 const PDFViewer = () => {
   const { currentDocument } = useStore();
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [scale, setScale] = useState(1.0);
+  const [numPages, setNumPages] = useState<number>(0);
+  const [pageNumber, setPageNumber] = useState<number>(1);
+  const [scale, setScale] = useState<number>(1.0);
+
+  const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
+    setNumPages(numPages);
+    setPageNumber(1);
+  }, []);
 
   const handlePrint = () => {
     window.print();
@@ -22,8 +31,8 @@ const PDFViewer = () => {
   };
 
   const handlePageChange = (page: number) => {
-    if (page >= 1 && page <= totalPages) {
-      setCurrentPage(page);
+    if (page >= 1 && page <= numPages) {
+      setPageNumber(page);
     }
   };
 
@@ -51,8 +60,8 @@ const PDFViewer = () => {
           {/* Page Navigation */}
           <div className="flex items-center space-x-2">
             <button
-              onClick={() => handlePageChange(currentPage - 1)}
-              disabled={currentPage <= 1}
+              onClick={() => handlePageChange(pageNumber - 1)}
+              disabled={pageNumber <= 1}
               className="p-1 rounded hover:bg-gray-200 disabled:opacity-50"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -60,17 +69,17 @@ const PDFViewer = () => {
             <div className="flex items-center space-x-1">
               <input
                 type="number"
-                value={currentPage}
+                value={pageNumber}
                 onChange={(e) => handlePageChange(parseInt(e.target.value) || 1)}
                 className="w-12 px-2 py-1 text-sm border border-gray-300 rounded text-center"
                 min="1"
-                max={totalPages}
+                max={numPages}
               />
-              <span className="text-sm text-gray-600">/ {totalPages}</span>
+              <span className="text-sm text-gray-600">/ {numPages}</span>
             </div>
             <button
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={currentPage >= totalPages}
+              onClick={() => handlePageChange(pageNumber + 1)}
+              disabled={pageNumber >= numPages}
               className="p-1 rounded hover:bg-gray-200 disabled:opacity-50"
             >
               <ChevronRight className="h-4 w-4" />
@@ -106,26 +115,31 @@ const PDFViewer = () => {
 
       {/* PDF Display */}
       <div className="flex-1 overflow-auto bg-gray-100 p-4">
-        <div className="max-w-full mx-auto">
-          <div 
-            className="bg-white shadow-lg mx-auto"
-            style={{ 
-              width: `${612 * scale}px`, 
-              height: `${792 * scale}px`,
-              transform: `scale(${scale})`,
-              transformOrigin: 'top center'
-            }}
-          >
-            {/* PDF placeholder - in real implementation, use react-pdf here */}
-            <div className="w-full h-full flex items-center justify-center border">
-              <div className="text-center text-gray-500">
-                <p className="text-lg font-medium">{currentDocument.name}</p>
-                <p className="text-sm">Page {currentPage} of {totalPages}</p>
-                <p className="text-xs mt-2">PDF content would render here</p>
-                <p className="text-xs">(react-pdf integration needed)</p>
+        <div className="flex justify-center">
+          <Document
+            file={currentDocument.url}
+            onLoadSuccess={onDocumentLoadSuccess}
+            loading={
+              <div className="flex items-center justify-center p-8">
+                <div className="text-gray-500">Loading PDF...</div>
               </div>
-            </div>
-          </div>
+            }
+            error={
+              <div className="flex items-center justify-center p-8">
+                <div className="text-red-500">Error loading PDF. Please try again.</div>
+              </div>
+            }
+          >
+            <Page
+              pageNumber={pageNumber}
+              scale={scale}
+              loading={
+                <div className="bg-white shadow-lg mx-auto flex items-center justify-center" style={{ width: 612, height: 792 }}>
+                  <div className="text-gray-500">Loading page...</div>
+                </div>
+              }
+            />
+          </Document>
         </div>
       </div>
     </div>
