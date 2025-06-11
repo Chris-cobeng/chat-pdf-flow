@@ -1,7 +1,7 @@
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Printer, MessageCircle, HelpCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Printer, MessageCircle, HelpCircle, FileText, RotateCcw, X } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import {
   ContextMenu,
@@ -20,7 +20,11 @@ const PDFViewer = () => {
   const [scale, setScale] = useState<number>(1.0);
   const [selectedText, setSelectedText] = useState<string>('');
   const [highlightedAreas, setHighlightedAreas] = useState<Array<{id: string, text: string, color: string}>>([]);
+  const [showActionMenu, setShowActionMenu] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+  const [hoveredText, setHoveredText] = useState<string>('');
   const pageRef = useRef<HTMLDivElement>(null);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
 
   const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
@@ -45,48 +49,90 @@ const PDFViewer = () => {
     }
   };
 
-  const handleTextSelection = () => {
+  const handleTextSelection = (e: React.MouseEvent) => {
     const selection = window.getSelection();
     if (selection && selection.toString().trim()) {
-      setSelectedText(selection.toString().trim());
+      const text = selection.toString().trim();
+      setSelectedText(text);
+      
+      // Position the action menu near the selection
+      const rect = selection.getRangeAt(0).getBoundingClientRect();
+      setMenuPosition({
+        x: rect.left + rect.width / 2,
+        y: rect.top - 10
+      });
+      setShowActionMenu(true);
     }
   };
 
-  const handleExplain = () => {
+  const handleMouseMove = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'span' && target.textContent) {
+      setHoveredText(target.textContent);
+    } else {
+      setHoveredText('');
+    }
+  };
+
+  const closeActionMenu = () => {
+    setShowActionMenu(false);
+    setSelectedText('');
+    window.getSelection()?.removeAllRanges();
+  };
+
+  const handleAction = (action: string) => {
     if (selectedText && currentDocument) {
+      let message = '';
+      
+      switch (action) {
+        case 'explain':
+          message = `Please explain this text from the document: "${selectedText}"`;
+          break;
+        case 'summarize':
+          message = `Please summarize this text: "${selectedText}"`;
+          break;
+        case 'rewrite':
+          message = `Please rewrite this text in a clearer way: "${selectedText}"`;
+          break;
+        case 'ask':
+          message = `I have a question about this text: "${selectedText}". Can you provide more details?`;
+          break;
+        default:
+          message = `Help me understand this text: "${selectedText}"`;
+      }
+      
       addMessage({
         role: 'user',
-        text: `Please explain this text from the document: "${selectedText}"`
+        text: message
       });
       
       // Add a mock AI response for demonstration
       setTimeout(() => {
+        let response = '';
+        switch (action) {
+          case 'explain':
+            response = `I'd be happy to explain that section. The text "${selectedText}" appears to be discussing a key concept in the document. This seems to relate to the main theme and provides important context for understanding the overall content.`;
+            break;
+          case 'summarize':
+            response = `Here's a summary of that text: The main points are focused on the core concepts presented, highlighting the essential information needed to understand this section.`;
+            break;
+          case 'rewrite':
+            response = `Here's a clearer version: [This would be a simplified and more accessible version of the selected text, maintaining the original meaning while improving clarity.]`;
+            break;
+          case 'ask':
+            response = `Great question about "${selectedText}"! This section is particularly important because it establishes key principles that are referenced throughout the document. Would you like me to elaborate on any specific aspect?`;
+            break;
+          default:
+            response = `I can help you understand this content better. The selected text covers important aspects that contribute to the overall message of the document.`;
+        }
+        
         addMessage({
           role: 'ai',
-          text: `I'd be happy to explain that section. The text "${selectedText}" appears to be discussing a key concept in the document. This seems to relate to the main theme and provides important context for understanding the overall content.`
+          text: response
         });
       }, 1000);
       
-      setSelectedText('');
-    }
-  };
-
-  const handleAskQuestion = () => {
-    if (selectedText && currentDocument) {
-      addMessage({
-        role: 'user',
-        text: `I have a question about this text: "${selectedText}". Can you provide more details?`
-      });
-      
-      // Add a mock AI response for demonstration
-      setTimeout(() => {
-        addMessage({
-          role: 'ai',
-          text: `Great question about "${selectedText}"! This section is particularly important because it establishes key principles that are referenced throughout the document. Would you like me to elaborate on any specific aspect?`
-        });
-      }, 1000);
-      
-      setSelectedText('');
+      closeActionMenu();
     }
   };
 
@@ -98,9 +144,26 @@ const PDFViewer = () => {
         color: 'bg-yellow-200'
       };
       setHighlightedAreas(prev => [...prev, newHighlight]);
-      setSelectedText('');
+      closeActionMenu();
     }
   };
+
+  // Close action menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (actionMenuRef.current && !actionMenuRef.current.contains(event.target as Node)) {
+        closeActionMenu();
+      }
+    };
+
+    if (showActionMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showActionMenu]);
 
   if (!currentDocument) {
     return (
@@ -181,19 +244,30 @@ const PDFViewer = () => {
       </div>
 
       {/* PDF Display */}
-      <div className="flex-1 overflow-auto bg-gradient-to-br from-gray-50 to-blue-50 p-6">
+      <div className="flex-1 overflow-auto bg-gradient-to-br from-gray-50 to-blue-50 p-6 relative">
         <div className="flex justify-center min-h-full">
           <ContextMenu>
             <ContextMenuTrigger>
               <div 
                 ref={pageRef}
-                className="pdf-container shadow-2xl rounded-lg overflow-hidden bg-white border border-gray-200 hover:shadow-3xl transition-shadow duration-300 mx-auto"
+                className="pdf-container shadow-2xl rounded-lg overflow-hidden bg-white border border-gray-200 hover:shadow-3xl transition-shadow duration-300 mx-auto relative"
                 onMouseUp={handleTextSelection}
+                onMouseMove={handleMouseMove}
                 style={{
                   cursor: selectedText ? 'pointer' : 'default',
                   maxWidth: 'fit-content'
                 }}
               >
+                <style jsx global>{`
+                  .react-pdf__Page__textContent span:hover {
+                    background-color: rgba(59, 130, 246, 0.1) !important;
+                    transition: background-color 0.2s ease !important;
+                  }
+                  .react-pdf__Page__textContent span {
+                    transition: background-color 0.2s ease !important;
+                  }
+                `}</style>
+                
                 <Document
                   file={currentDocument.url}
                   onLoadSuccess={onDocumentLoadSuccess}
@@ -241,11 +315,11 @@ const PDFViewer = () => {
                   <div className="h-4 w-4 bg-yellow-300 rounded-sm mr-2"></div>
                   Highlight Text
                 </ContextMenuItem>
-                <ContextMenuItem onClick={handleExplain} className="cursor-pointer">
+                <ContextMenuItem onClick={() => handleAction('explain')} className="cursor-pointer">
                   <HelpCircle className="h-4 w-4 mr-2" />
                   Explain This
                 </ContextMenuItem>
-                <ContextMenuItem onClick={handleAskQuestion} className="cursor-pointer">
+                <ContextMenuItem onClick={() => handleAction('ask')} className="cursor-pointer">
                   <MessageCircle className="h-4 w-4 mr-2" />
                   Ask Question
                 </ContextMenuItem>
@@ -253,6 +327,80 @@ const PDFViewer = () => {
             )}
           </ContextMenu>
         </div>
+
+        {/* Floating Action Menu */}
+        {showActionMenu && (
+          <div
+            ref={actionMenuRef}
+            className="fixed z-50 bg-gray-800 rounded-xl shadow-2xl p-2 flex items-center space-x-1 transform -translate-x-1/2"
+            style={{
+              left: `${menuPosition.x}px`,
+              top: `${menuPosition.y}px`,
+            }}
+          >
+            {/* Action Buttons */}
+            <button
+              onClick={() => handleAction('explain')}
+              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              Explain
+            </button>
+            <button
+              onClick={() => handleAction('summarize')}
+              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              Summarize
+            </button>
+            <button
+              onClick={() => handleAction('rewrite')}
+              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              Rewrite
+            </button>
+            
+            {/* Color Dots */}
+            <div className="flex space-x-1 px-2">
+              <div className="w-3 h-3 rounded-full bg-red-500 cursor-pointer hover:scale-110 transition-transform"></div>
+              <div className="w-3 h-3 rounded-full bg-yellow-500 cursor-pointer hover:scale-110 transition-transform"></div>
+              <div className="w-3 h-3 rounded-full bg-lime-500 cursor-pointer hover:scale-110 transition-transform"></div>
+              <div className="w-3 h-3 rounded-full bg-green-500 cursor-pointer hover:scale-110 transition-transform"></div>
+              <div className="w-3 h-3 rounded-full bg-blue-500 cursor-pointer hover:scale-110 transition-transform"></div>
+              <div className="w-3 h-3 rounded-full bg-purple-500 cursor-pointer hover:scale-110 transition-transform"></div>
+              <div className="w-3 h-3 rounded-full bg-pink-500 cursor-pointer hover:scale-110 transition-transform"></div>
+            </div>
+
+            {/* Action Icons */}
+            <div className="flex space-x-1 pl-2 border-l border-gray-600">
+              <button
+                onClick={() => handleAction('ask')}
+                className="p-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                title="Ask question about this"
+              >
+                <MessageCircle className="h-3 w-3" />
+              </button>
+              <button
+                onClick={handleHighlight}
+                className="p-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                title="Copy"
+              >
+                <FileText className="h-3 w-3" />
+              </button>
+            </div>
+
+            {/* Close Button */}
+            <button
+              onClick={closeActionMenu}
+              className="p-1 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors ml-2"
+            >
+              <X className="h-3 w-3" />
+            </button>
+
+            {/* Tooltip showing "Ask question about this" */}
+            <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+              Ask question about this
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
