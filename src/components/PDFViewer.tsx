@@ -121,7 +121,7 @@ const PDFViewer = () => {
   return (
     <div className="h-full flex flex-col">
       {/* PDF Controls */}
-      <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-white to-gray-50">
+      <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-white to-gray-50 flex-shrink-0">
         <div className="flex items-center justify-between">
           {/* Page Navigation */}
           <div className="flex items-center space-x-3">
@@ -182,45 +182,53 @@ const PDFViewer = () => {
 
       {/* PDF Display */}
       <div className="flex-1 overflow-auto bg-gradient-to-br from-gray-50 to-blue-50 p-6">
-        <div className="flex justify-center">
+        <div className="flex justify-center min-h-full">
           <ContextMenu>
             <ContextMenuTrigger>
               <div 
                 ref={pageRef}
-                className="pdf-container shadow-2xl rounded-lg overflow-hidden bg-white border border-gray-200 hover:shadow-3xl transition-shadow duration-300"
+                className="pdf-container shadow-2xl rounded-lg overflow-hidden bg-white border border-gray-200 hover:shadow-3xl transition-shadow duration-300 mx-auto"
                 onMouseUp={handleTextSelection}
                 style={{
-                  cursor: selectedText ? 'pointer' : 'default'
+                  cursor: selectedText ? 'pointer' : 'default',
+                  maxWidth: 'fit-content'
                 }}
               >
                 <Document
                   file={currentDocument.url}
                   onLoadSuccess={onDocumentLoadSuccess}
                   loading={
-                    <div className="flex items-center justify-center p-8">
+                    <div className="flex items-center justify-center p-16 min-h-[600px]">
                       <div className="flex items-center space-x-3">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                        <div className="text-gray-600">Loading PDF...</div>
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                        <div className="text-gray-600 text-lg">Loading PDF...</div>
                       </div>
                     </div>
                   }
                   error={
-                    <div className="flex items-center justify-center p-8">
+                    <div className="flex items-center justify-center p-16 min-h-[600px]">
                       <div className="text-red-500 text-center">
-                        <div className="text-lg font-medium mb-2">Error loading PDF</div>
-                        <div className="text-sm">Please try again or upload a different file.</div>
+                        <div className="text-xl font-medium mb-2">Error loading PDF</div>
+                        <div className="text-base">Please try again or upload a different file.</div>
                       </div>
                     </div>
                   }
+                  options={{
+                    cMapUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/cmaps/',
+                    cMapPacked: true,
+                    standardFontDataUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/standard_fonts/'
+                  }}
                 >
                   <Page
                     pageNumber={pageNumber}
                     scale={scale}
                     loading={
-                      <div className="bg-white shadow-lg mx-auto flex items-center justify-center animate-pulse" style={{ width: 612 * scale, height: 792 * scale }}>
+                      <div className="bg-white shadow-lg mx-auto flex items-center justify-center animate-pulse border border-gray-200 rounded" style={{ width: Math.max(612 * scale, 400), height: Math.max(792 * scale, 600) }}>
                         <div className="text-gray-400">Loading page...</div>
                       </div>
                     }
+                    renderTextLayer={true}
+                    renderAnnotationLayer={true}
                     className="pdf-page"
                   />
                 </Document>
