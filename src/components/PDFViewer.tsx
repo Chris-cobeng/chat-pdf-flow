@@ -1,7 +1,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Printer, MessageCircle, HelpCircle, FileText, RotateCcw, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Printer, MessageCircle, HelpCircle, FileText, X } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import {
   ContextMenu,
@@ -10,7 +10,7 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 
-// Set up PDF.js worker
+// Set up PDF.js worker with better configuration
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
 
 const PDFViewer = () => {
@@ -19,16 +19,22 @@ const PDFViewer = () => {
   const [pageNumber, setPageNumber] = useState<number>(1);
   const [scale, setScale] = useState<number>(1.0);
   const [selectedText, setSelectedText] = useState<string>('');
-  const [highlightedAreas, setHighlightedAreas] = useState<Array<{id: string, text: string, color: string}>>([]);
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
-  const [hoveredText, setHoveredText] = useState<string>('');
+  const [isDocumentLoaded, setIsDocumentLoaded] = useState(false);
   const pageRef = useRef<HTMLDivElement>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
 
   const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
+    console.log('PDF loaded successfully with', numPages, 'pages');
     setNumPages(numPages);
     setPageNumber(1);
+    setIsDocumentLoaded(true);
+  }, []);
+
+  const onDocumentLoadError = useCallback((error: Error) => {
+    console.error('PDF load error:', error);
+    setIsDocumentLoaded(false);
   }, []);
 
   const handlePrint = () => {
@@ -62,15 +68,6 @@ const PDFViewer = () => {
         y: rect.top - 10
       });
       setShowActionMenu(true);
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'span' && target.textContent) {
-      setHoveredText(target.textContent);
-    } else {
-      setHoveredText('');
     }
   };
 
@@ -138,12 +135,6 @@ const PDFViewer = () => {
 
   const handleHighlight = () => {
     if (selectedText) {
-      const newHighlight = {
-        id: Date.now().toString(),
-        text: selectedText,
-        color: 'bg-yellow-200'
-      };
-      setHighlightedAreas(prev => [...prev, newHighlight]);
       closeActionMenu();
     }
   };
@@ -164,6 +155,17 @@ const PDFViewer = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showActionMenu]);
+
+  // Reset state when document changes
+  useEffect(() => {
+    if (currentDocument) {
+      setIsDocumentLoaded(false);
+      setPageNumber(1);
+      setNumPages(0);
+      setScale(1.0);
+      closeActionMenu();
+    }
+  }, [currentDocument]);
 
   if (!currentDocument) {
     return (
@@ -203,7 +205,7 @@ const PDFViewer = () => {
           <div className="flex items-center space-x-3">
             <button
               onClick={() => handlePageChange(pageNumber - 1)}
-              disabled={pageNumber <= 1}
+              disabled={pageNumber <= 1 || !isDocumentLoaded}
               className="p-2 rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeft className="h-5 w-5 text-gray-600" />
@@ -216,23 +218,30 @@ const PDFViewer = () => {
                 className="w-12 text-sm text-center border-none outline-none"
                 min="1"
                 max={numPages}
+                disabled={!isDocumentLoaded}
               />
-              <span className="text-sm text-gray-500">/ {numPages}</span>
+              <span className="text-sm text-gray-500">/ {numPages || 0}</span>
             </div>
             <button
               onClick={() => handlePageChange(pageNumber + 1)}
-              disabled={pageNumber >= numPages}
+              disabled={pageNumber >= numPages || !isDocumentLoaded}
               className="p-2 rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronRight className="h-5 w-5 text-gray-600" />
             </button>
           </div>
 
+          {/* Document Info */}
+          <div className="text-sm text-gray-600">
+            {currentDocument.name}
+          </div>
+
           {/* Zoom Controls */}
           <div className="flex items-center space-x-2 bg-white rounded-lg border border-gray-200 p-1">
             <button
               onClick={handleZoomOut}
-              className="p-2 rounded-md hover:bg-gray-50 transition-colors"
+              disabled={!isDocumentLoaded}
+              className="p-2 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
               <ZoomOut className="h-4 w-4 text-gray-600" />
             </button>
@@ -241,14 +250,16 @@ const PDFViewer = () => {
             </span>
             <button
               onClick={handleZoomIn}
-              className="p-2 rounded-md hover:bg-gray-50 transition-colors"
+              disabled={!isDocumentLoaded}
+              className="p-2 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
               <ZoomIn className="h-4 w-4 text-gray-600" />
             </button>
             <div className="w-px h-6 bg-gray-200 mx-1" />
             <button
               onClick={handlePrint}
-              className="p-2 rounded-md hover:bg-gray-50 transition-colors"
+              disabled={!isDocumentLoaded}
+              className="p-2 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
               <Printer className="h-4 w-4 text-gray-600" />
             </button>
@@ -265,7 +276,6 @@ const PDFViewer = () => {
                 ref={pageRef}
                 className="pdf-container shadow-2xl rounded-lg overflow-hidden bg-white border border-gray-200 hover:shadow-3xl transition-shadow duration-300 mx-auto relative"
                 onMouseUp={handleTextSelection}
-                onMouseMove={handleMouseMove}
                 style={{
                   cursor: selectedText ? 'pointer' : 'default',
                   maxWidth: 'fit-content'
@@ -274,6 +284,7 @@ const PDFViewer = () => {
                 <Document
                   file={currentDocument.url}
                   onLoadSuccess={onDocumentLoadSuccess}
+                  onLoadError={onDocumentLoadError}
                   loading={
                     <div className="flex items-center justify-center p-16 min-h-[600px]">
                       <div className="flex items-center space-x-3">
@@ -286,28 +297,31 @@ const PDFViewer = () => {
                     <div className="flex items-center justify-center p-16 min-h-[600px]">
                       <div className="text-red-500 text-center">
                         <div className="text-xl font-medium mb-2">Error loading PDF</div>
-                        <div className="text-base">Please try again or upload a different file.</div>
+                        <div className="text-base">Please try uploading the file again or use a different PDF.</div>
                       </div>
                     </div>
                   }
                   options={{
-                    cMapUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/cmaps/',
+                    cMapUrl: `//unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
                     cMapPacked: true,
-                    standardFontDataUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/standard_fonts/'
+                    standardFontDataUrl: `//unpkg.com/pdfjs-dist@${pdfjs.version}/standard_fonts/`,
+                    workerSrc: `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`
                   }}
                 >
-                  <Page
-                    pageNumber={pageNumber}
-                    scale={scale}
-                    loading={
-                      <div className="bg-white shadow-lg mx-auto flex items-center justify-center animate-pulse border border-gray-200 rounded" style={{ width: Math.max(612 * scale, 400), height: Math.max(792 * scale, 600) }}>
-                        <div className="text-gray-400">Loading page...</div>
-                      </div>
-                    }
-                    renderTextLayer={true}
-                    renderAnnotationLayer={true}
-                    className="pdf-page"
-                  />
+                  {isDocumentLoaded && (
+                    <Page
+                      pageNumber={pageNumber}
+                      scale={scale}
+                      loading={
+                        <div className="bg-white shadow-lg mx-auto flex items-center justify-center animate-pulse border border-gray-200 rounded" style={{ width: Math.max(612 * scale, 400), height: Math.max(792 * scale, 600) }}>
+                          <div className="text-gray-400">Loading page...</div>
+                        </div>
+                      }
+                      renderTextLayer={true}
+                      renderAnnotationLayer={true}
+                      className="pdf-page"
+                    />
+                  )}
                 </Document>
               </div>
             </ContextMenuTrigger>
@@ -384,7 +398,7 @@ const PDFViewer = () => {
               <button
                 onClick={handleHighlight}
                 className="p-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
-                title="Copy"
+                title="Highlight"
               >
                 <FileText className="h-3 w-3" />
               </button>
@@ -397,11 +411,6 @@ const PDFViewer = () => {
             >
               <X className="h-3 w-3" />
             </button>
-
-            {/* Tooltip showing "Ask question about this" */}
-            <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-              Ask question about this
-            </div>
           </div>
         )}
       </div>
