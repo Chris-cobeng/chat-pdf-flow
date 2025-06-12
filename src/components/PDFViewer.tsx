@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Printer, MessageCircle, HelpCircle, FileText, X } from 'lucide-react';
@@ -22,6 +21,8 @@ const PDFViewer = () => {
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const [isDocumentLoaded, setIsDocumentLoaded] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const pageRef = useRef<HTMLDivElement>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
 
@@ -30,10 +31,21 @@ const PDFViewer = () => {
     setNumPages(numPages);
     setPageNumber(1);
     setIsDocumentLoaded(true);
+    setIsLoading(false);
+    setError(null);
   }, []);
 
   const onDocumentLoadError = useCallback((error: Error) => {
     console.error('PDF load error:', error);
+    setIsDocumentLoaded(false);
+    setIsLoading(false);
+    setError('Failed to load PDF. Please try again.');
+  }, []);
+
+  const onDocumentLoadStart = useCallback(() => {
+    console.log('PDF loading started');
+    setIsLoading(true);
+    setError(null);
     setIsDocumentLoaded(false);
   }, []);
 
@@ -163,6 +175,8 @@ const PDFViewer = () => {
       setPageNumber(1);
       setNumPages(0);
       setScale(1.0);
+      setIsLoading(false);
+      setError(null);
       closeActionMenu();
     }
   }, [currentDocument]);
@@ -285,6 +299,7 @@ const PDFViewer = () => {
                   file={currentDocument.url}
                   onLoadSuccess={onDocumentLoadSuccess}
                   onLoadError={onDocumentLoadError}
+                  onLoadStart={onDocumentLoadStart}
                   loading={
                     <div className="flex items-center justify-center p-16 min-h-[600px]">
                       <div className="flex items-center space-x-3">
@@ -305,7 +320,6 @@ const PDFViewer = () => {
                     cMapUrl: `//unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
                     cMapPacked: true,
                     standardFontDataUrl: `//unpkg.com/pdfjs-dist@${pdfjs.version}/standard_fonts/`,
-                    workerSrc: `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`
                   }}
                 >
                   {isDocumentLoaded && (
