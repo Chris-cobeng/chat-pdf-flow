@@ -24,8 +24,9 @@ const PDFViewer = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [textLayerError, setTextLayerError] = useState(false);
-  const [loadedPages, setLoadedPages] = useState<Set<number>>(new Set());
+  const [containerWidth, setContainerWidth] = useState<number>(800);
   const actionMenuRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Memoize PDF options to prevent unnecessary reloads
   const pdfOptions = useMemo(() => ({
@@ -38,6 +39,20 @@ const PDFViewer = () => {
     verbosity: 0,
   }), []);
 
+  // Update container width on resize
+  useEffect(() => {
+    const updateContainerWidth = () => {
+      if (containerRef.current) {
+        const width = containerRef.current.clientWidth - 48; // Account for padding
+        setContainerWidth(width);
+      }
+    };
+
+    updateContainerWidth();
+    window.addEventListener('resize', updateContainerWidth);
+    return () => window.removeEventListener('resize', updateContainerWidth);
+  }, []);
+
   const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
     console.log('PDF loaded successfully with', numPages, 'pages');
     setNumPages(numPages);
@@ -45,7 +60,6 @@ const PDFViewer = () => {
     setIsLoading(false);
     setError(null);
     setTextLayerError(false);
-    setLoadedPages(new Set());
   }, []);
 
   const onDocumentLoadError = useCallback((error: Error) => {
@@ -64,20 +78,11 @@ const PDFViewer = () => {
     setTextLayerError(false);
   }, []);
 
-  const onPageLoadSuccess = useCallback((pageNumber: number) => {
-    console.log(`Page ${pageNumber} loaded successfully`);
-    setLoadedPages(prev => new Set([...prev, pageNumber]));
-  }, []);
-
   const onPageLoadError = useCallback((error: Error, pageNumber: number) => {
     console.error(`Page ${pageNumber} load error:`, error);
     if (error.message.includes('sendWithStream') || error.message.includes('TextLayer')) {
       setTextLayerError(true);
     }
-  }, []);
-
-  const onPageRenderSuccess = useCallback((pageNumber: number) => {
-    console.log(`Page ${pageNumber} rendered successfully`);
   }, []);
 
   const onPageRenderError = useCallback((error: Error, pageNumber: number) => {
@@ -209,7 +214,6 @@ const PDFViewer = () => {
       setIsLoading(false);
       setError(null);
       closeActionMenu();
-      setLoadedPages(new Set());
     }
   }, [currentDocument]);
 
@@ -231,9 +235,29 @@ const PDFViewer = () => {
 
   return (
     <div className="h-full flex flex-col">
-      {/* CSS for hover effects */}
+      {/* CSS for hover effects and PDF styling */}
       <style>
         {`
+          .react-pdf__Page {
+            margin: 0 auto 20px auto !important;
+            display: block !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+            border-radius: 8px !important;
+            overflow: hidden !important;
+            background: white !important;
+          }
+          .react-pdf__Page__canvas {
+            display: block !important;
+            margin: 0 auto !important;
+            width: 100% !important;
+            height: auto !important;
+          }
+          .react-pdf__Page__textContent {
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+          }
           .react-pdf__Page__textContent span:hover {
             background-color: rgba(59, 130, 246, 0.1) !important;
             transition: background-color 0.2s ease !important;
@@ -241,16 +265,11 @@ const PDFViewer = () => {
           .react-pdf__Page__textContent span {
             transition: background-color 0.2s ease !important;
           }
-          .react-pdf__Page {
-            margin: 0 auto 20px auto !important;
-            display: block !important;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
-            border-radius: 8px !important;
-            overflow: hidden !important;
-          }
-          .react-pdf__Page__canvas {
-            display: block !important;
-            margin: 0 auto !important;
+          .react-pdf__Page__annotationLayer {
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
           }
         `}
       </style>
@@ -308,12 +327,12 @@ const PDFViewer = () => {
       </div>
 
       {/* PDF Display - Vertical Scrollable */}
-      <div className="flex-1 overflow-auto bg-gradient-to-br from-gray-50 to-blue-50 p-6 relative">
+      <div ref={containerRef} className="flex-1 overflow-auto bg-gradient-to-br from-gray-50 to-blue-50 p-6 relative">
         <div className="flex justify-center">
           <ContextMenu>
             <ContextMenuTrigger>
               <div 
-                className="pdf-container max-w-fit mx-auto relative"
+                className="pdf-container max-w-full mx-auto relative"
                 onMouseUp={handleTextSelection}
                 style={{
                   cursor: selectedText ? 'pointer' : 'default'
@@ -346,13 +365,11 @@ const PDFViewer = () => {
                     <Page
                       key={`page_${index + 1}_${scale}_${textLayerError ? 'no-text' : 'text'}`}
                       pageNumber={index + 1}
-                      scale={scale}
-                      onLoadSuccess={() => onPageLoadSuccess(index + 1)}
+                      width={Math.min(containerWidth * scale, containerWidth)}
                       onLoadError={(error) => onPageLoadError(error, index + 1)}
-                      onRenderSuccess={() => onPageRenderSuccess(index + 1)}
                       onRenderError={(error) => onPageRenderError(error, index + 1)}
                       loading={
-                        <div className="bg-white shadow-lg mx-auto flex items-center justify-center animate-pulse border border-gray-200 rounded mb-5" style={{ width: Math.max(612 * scale, 400), height: Math.max(792 * scale, 600) }}>
+                        <div className="bg-white shadow-lg mx-auto flex items-center justify-center animate-pulse border border-gray-200 rounded mb-5" style={{ width: Math.min(containerWidth * scale, containerWidth), height: Math.min(containerWidth * scale * 1.414, containerWidth * 1.414) }}>
                           <div className="text-gray-400">Loading page {index + 1}...</div>
                         </div>
                       }
