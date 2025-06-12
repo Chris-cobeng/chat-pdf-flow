@@ -183,6 +183,19 @@ const PDFViewer = () => {
 
   return (
     <div className="h-full flex flex-col">
+      {/* CSS for hover effects */}
+      <style>
+        {`
+          .react-pdf__Page__textContent span:hover {
+            background-color: rgba(59, 130, 246, 0.1) !important;
+            transition: background-color 0.2s ease !important;
+          }
+          .react-pdf__Page__textContent span {
+            transition: background-color 0.2s ease !important;
+          }
+        `}
+      </style>
+
       {/* PDF Controls */}
       <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-white to-gray-50 flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -258,16 +271,6 @@ const PDFViewer = () => {
                   maxWidth: 'fit-content'
                 }}
               >
-                <style jsx global>{`
-                  .react-pdf__Page__textContent span:hover {
-                    background-color: rgba(59, 130, 246, 0.1) !important;
-                    transition: background-color 0.2s ease !important;
-                  }
-                  .react-pdf__Page__textContent span {
-                    transition: background-color 0.2s ease !important;
-                  }
-                `}</style>
-                
                 <Document
                   file={currentDocument.url}
                   onLoadSuccess={onDocumentLoadSuccess}
