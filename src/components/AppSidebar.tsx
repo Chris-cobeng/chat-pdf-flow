@@ -78,31 +78,38 @@ const AppSidebar = () => {
               onDragOver={handleDragOver}
               onDrop={handleDrop}
             >
-              <Upload className={`mx-auto text-blue-500 mb-2 ${isCollapsed ? 'h-6 w-6' : 'h-8 w-8'}`} />
+              {/* Single hidden file input for both states */}
+              <input
+                id="pdfUploadInput"
+                type="file"
+                accept=".pdf"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+
               {!isCollapsed && (
                 <>
+                  {/* Upload icon for expanded view */}
+                  <Upload className="mx-auto text-blue-500 mb-2 h-8 w-8" />
                   <p className="text-sm text-gray-600 mb-2">Drag & drop PDF files here</p>
-                  <label className="cursor-pointer">
-                    <span className="text-blue-600 hover:text-blue-500 text-sm font-medium">
-                      Choose files
-                    </span>
-                    <input
-                      type="file"
-                      accept=".pdf"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                    />
+                  {/* Styled "Upload Document" button/label for expanded view */}
+                  <label
+                    htmlFor="pdfUploadInput"
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg cursor-pointer inline-block text-sm"
+                  >
+                    Upload Document
                   </label>
                 </>
               )}
+
               {isCollapsed && (
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    accept=".pdf"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
+                // In collapsed mode, the Upload icon (wrapped in a label) triggers the file input.
+                // The outer div is already styled with aspect-square.
+                <label
+                  htmlFor="pdfUploadInput"
+                  className="cursor-pointer w-full h-full flex items-center justify-center"
+                >
+                  <Upload className="mx-auto text-blue-500 h-6 w-6" />
                 </label>
               )}
             </div>
