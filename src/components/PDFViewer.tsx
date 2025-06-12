@@ -1,8 +1,16 @@
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { ZoomIn, ZoomOut, Printer } from 'lucide-react';
+import { ZoomIn, ZoomOut, Printer, Edit3 } from 'lucide-react'; // Added Edit3 for Sign icon
 import { useStore } from '../store/useStore';
+import SignaturePadComponent from './SignaturePad';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog';
+import { Button } from './ui/button';
 
 // Set up PDF.js worker with better configuration
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
@@ -16,6 +24,12 @@ const PDFViewer = () => {
   const [error, setError] = useState<string | null>(null);
   const [containerWidth, setContainerWidth] = useState<number>(800);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Signature state
+  const [isSignDialogOpen, setIsSignDialogOpen] = useState(false);
+  // const [signatureToApply, setSignatureToApply] = useState<string | null>(null); // Kept for clarity, but applySignature uses param
+  const [targetPageForSign, setTargetPageForSign] = useState<number | null>(null);
+  const pageCanvasRefs = useRef<Record<number, HTMLCanvasElement | null>>({});
 
   // Memoize PDF options to prevent unnecessary reloads
   const pdfOptions = useMemo(() => ({
@@ -83,6 +97,54 @@ const PDFViewer = () => {
   const handleZoomOut = () => {
     setScale(prev => Math.max(prev - 0.25, 0.5));
   };
+
+  const applySignature = useCallback((signatureDataUrl: string, pageNumber: number | null) => {
+    if (!signatureDataUrl || pageNumber === null) return;
+
+    const canvas = pageCanvasRefs.current[pageNumber];
+
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const img = new Image();
+        img.onload = () => {
+          // Adjust for DPI for drawing
+          const ratio = window.devicePixelRatio || 1;
+
+          // The canvas CSS dimensions are set by react-pdf via `width` prop
+          // We need to draw based on the physical dimensions but position based on logical ones
+          const canvasLogicalWidth = canvas.offsetWidth || canvas.width / ratio;
+          const canvasLogicalHeight = canvas.offsetHeight || canvas.height / ratio;
+
+          const sigWidthLogical = 150;
+          const sigHeightLogical = (img.height / img.width) * sigWidthLogical;
+
+          // Position at bottom-right (logical coordinates)
+          const xLogical = canvasLogicalWidth - sigWidthLogical - 20;
+          const yLogical = canvasLogicalHeight - sigHeightLogical - 20;
+
+          // Convert logical coordinates to physical coordinates for drawing
+          const xPhysical = xLogical * ratio;
+          const yPhysical = yLogical * ratio;
+          const sigWidthPhysical = sigWidthLogical * ratio;
+          const sigHeightPhysical = sigHeightLogical * ratio;
+
+          ctx.drawImage(img, xPhysical, yPhysical, sigWidthPhysical, sigHeightPhysical);
+          console.log(`Signature applied to page ${pageNumber} at (${xLogical}, ${yLogical}) scaled to ${sigWidthLogical}x${sigHeightLogical}`);
+        };
+        img.onerror = () => {
+          console.error('Failed to load signature image.');
+        };
+        img.src = signatureDataUrl;
+      } else {
+        console.error('Could not get 2D context from canvas for page', pageNumber);
+      }
+    } else {
+      console.error('Could not find canvas reference for page', pageNumber);
+    }
+    // setSignatureToApply(null); // Clear after attempting to apply - state removed for direct application
+    setTargetPageForSign(null); // Reset target page
+  }, []); // Consider adding `scale` to dependencies if signature size/position should adapt to zoom, though canvas refs might handle this.
 
   // Reset state when document changes
   useEffect(() => {
@@ -213,6 +275,7 @@ const PDFViewer = () => {
               options={pdfOptions}
             >
               {isDocumentLoaded && Array.from(new Array(numPages), (el, index) => (
+              <div key={`page_container_${index + 1}_${scale}`} className="relative mb-5 pdf-page-container">
                 <Page
                   key={`page_${index + 1}_${scale}`}
                   pageNumber={index + 1}
@@ -227,12 +290,49 @@ const PDFViewer = () => {
                   renderTextLayer={false}
                   renderAnnotationLayer={false}
                   className="pdf-page"
+                  canvasRef={(canvas) => {
+                    pageCanvasRefs.current[index + 1] = canvas;
+                  }}
                 />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="absolute top-2 right-2 z-20 bg-white hover:bg-gray-100 py-1 px-2 text-xs shadow-md"
+                  onClick={() => {
+                    setTargetPageForSign(index + 1);
+                    setIsSignDialogOpen(true);
+                  }}
+                >
+                  <Edit3 className="h-3 w-3 mr-1" />
+                  Sign Page
+                </Button>
+              </div>
               ))}
             </Document>
           </div>
         </div>
       </div>
+
+      {/* Signature Dialog */}
+      <Dialog open={isSignDialogOpen} onOpenChange={setIsSignDialogOpen}>
+        <DialogContent className="sm:max-w-[550px]">
+          <DialogHeader>
+            <DialogTitle>Provide Your Signature for Page {targetPageForSign}</DialogTitle>
+          </DialogHeader>
+          <SignaturePadComponent
+            width={480}
+            height={200}
+            onSave={(dataUrl) => {
+              setIsSignDialogOpen(false);
+              applySignature(dataUrl, targetPageForSign);
+            }}
+            onClear={() => {
+              // Optional: handle clear if needed outside the component
+              console.log('Signature cleared on page', targetPageForSign);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
