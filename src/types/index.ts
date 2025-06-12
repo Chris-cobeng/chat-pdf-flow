@@ -1,5 +1,5 @@
 
-export interface PDFDocument {
+export interface DocumentFile {
   id: string;
   name: string;
   file: File;
@@ -14,15 +14,15 @@ export interface ChatMessage {
 }
 
 export interface AppState {
-  documents: PDFDocument[];
-  currentDocument: PDFDocument | null;
+  documents: DocumentFile[];
+  currentDocument: DocumentFile | null;
   messages: ChatMessage[];
   isLoading: boolean;
 }
 
 export interface AppActions {
-  addDocument: (document: PDFDocument) => void;
-  setCurrentDocument: (document: PDFDocument | null) => void;
+  addDocument: (document: DocumentFile) => void;
+  setCurrentDocument: (document: DocumentFile | null) => void;
   addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
   setLoading: (loading: boolean) => void;
 }

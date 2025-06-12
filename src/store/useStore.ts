@@ -1,6 +1,6 @@
 
 import { create } from 'zustand';
-import { AppStore, PDFDocument, ChatMessage } from '../types';
+import { AppStore, DocumentFile, ChatMessage } from '../types';
 
 export const useStore = create<AppStore>((set, get) => ({
   // State
@@ -10,13 +10,13 @@ export const useStore = create<AppStore>((set, get) => ({
   isLoading: false,
 
   // Actions
-  addDocument: (document: PDFDocument) => {
+  addDocument: (document: DocumentFile) => {
     set((state) => ({
       documents: [...state.documents, document],
     }));
   },
 
-  setCurrentDocument: (document: PDFDocument | null) => {
+  setCurrentDocument: (document: DocumentFile | null) => {
     set({ currentDocument: document });
   },
 

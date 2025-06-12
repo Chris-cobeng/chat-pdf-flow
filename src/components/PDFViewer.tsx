@@ -111,6 +111,39 @@ const PDFViewer = () => {
     );
   }
 
+  // Check if the current document is not a PDF
+  if (currentDocument.file.type !== 'application/pdf') {
+    return (
+      <div className="h-full flex flex-col">
+        {/* Controls Bar - Simplified for non-PDFs */}
+        <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-white to-gray-50 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="text-sm text-gray-600">
+                {currentDocument.name}
+              </div>
+            </div>
+            {/* Placeholder for controls if needed in future, or remove this div */}
+            <div></div>
+          </div>
+        </div>
+        {/* Message Area */}
+        <div className="h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-blue-50">
+          <div className="text-center p-8 rounded-xl bg-white shadow-lg border border-gray-200">
+            <div className="text-gray-400 mb-6">
+              <svg className="mx-auto h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-3">Preview Not Available</h3>
+            <p className="text-gray-600 max-w-sm">Only PDF files can be previewed. Please select a PDF document to see the preview.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // If it is a PDF, render the PDF viewer
   return (
     <div className="h-full flex flex-col">
       {/* CSS for PDF styling */}

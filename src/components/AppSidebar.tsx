@@ -2,7 +2,21 @@
 import React from 'react';
 import { Upload, FileText, Settings } from 'lucide-react';
 import { useStore } from '../store/useStore';
-import { PDFDocument } from '../types';
+import { DocumentFile } from '../types';
+
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'image/jpeg',
+  'image/png',
+];
+
+const ALLOWED_EXTENSIONS = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpeg,.jpg,.png';
 import {
   Sidebar,
   SidebarContent,
@@ -22,8 +36,8 @@ const AppSidebar = () => {
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file && file.type === 'application/pdf') {
-      const document: PDFDocument = {
+    if (file && ALLOWED_MIME_TYPES.includes(file.type)) {
+      const document: DocumentFile = {
         id: Date.now().toString(),
         name: file.name,
         file: file,
@@ -41,8 +55,8 @@ const AppSidebar = () => {
   const handleDrop = (event: React.DragEvent) => {
     event.preventDefault();
     const file = event.dataTransfer.files[0];
-    if (file && file.type === 'application/pdf') {
-      const document: PDFDocument = {
+    if (file && ALLOWED_MIME_TYPES.includes(file.type)) {
+      const document: DocumentFile = {
         id: Date.now().toString(),
         name: file.name,
         file: file,
@@ -81,14 +95,14 @@ const AppSidebar = () => {
               <Upload className={`mx-auto text-blue-500 mb-2 ${isCollapsed ? 'h-6 w-6' : 'h-8 w-8'}`} />
               {!isCollapsed && (
                 <>
-                  <p className="text-sm text-gray-600 mb-2">Drag & drop PDF files here</p>
+                  <p className="text-sm text-gray-600 mb-2">Drag & drop files here</p>
                   <label className="cursor-pointer">
                     <span className="text-blue-600 hover:text-blue-500 text-sm font-medium">
                       Choose files
                     </span>
                     <input
                       type="file"
-                      accept=".pdf"
+                      accept={ALLOWED_EXTENSIONS}
                       onChange={handleFileUpload}
                       className="hidden"
                     />
@@ -99,7 +113,7 @@ const AppSidebar = () => {
                 <label className="cursor-pointer">
                   <input
                     type="file"
-                    accept=".pdf"
+                    accept={ALLOWED_EXTENSIONS}
                     onChange={handleFileUpload}
                     className="hidden"
                   />
