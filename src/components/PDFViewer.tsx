@@ -1,6 +1,7 @@
+
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Printer, MessageCircle, HelpCircle, FileText, X } from 'lucide-react';
+import { ZoomIn, ZoomOut, Printer, MessageCircle, HelpCircle, FileText, X } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import {
   ContextMenu,
@@ -15,7 +16,6 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 const PDFViewer = () => {
   const { currentDocument, addMessage } = useStore();
   const [numPages, setNumPages] = useState<number>(0);
-  const [pageNumber, setPageNumber] = useState<number>(1);
   const [scale, setScale] = useState<number>(1.0);
   const [selectedText, setSelectedText] = useState<string>('');
   const [showActionMenu, setShowActionMenu] = useState(false);
@@ -23,9 +23,8 @@ const PDFViewer = () => {
   const [isDocumentLoaded, setIsDocumentLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pageLoading, setPageLoading] = useState(false);
   const [textLayerError, setTextLayerError] = useState(false);
-  const pageRef = useRef<HTMLDivElement>(null);
+  const [loadedPages, setLoadedPages] = useState<Set<number>>(new Set());
   const actionMenuRef = useRef<HTMLDivElement>(null);
 
   // Memoize PDF options to prevent unnecessary reloads
@@ -36,17 +35,17 @@ const PDFViewer = () => {
     disableAutoFetch: false,
     disableStream: false,
     useSystemFonts: true,
-    verbosity: 0, // Reduce console noise
+    verbosity: 0,
   }), []);
 
   const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
     console.log('PDF loaded successfully with', numPages, 'pages');
     setNumPages(numPages);
-    setPageNumber(1);
     setIsDocumentLoaded(true);
     setIsLoading(false);
     setError(null);
     setTextLayerError(false);
+    setLoadedPages(new Set());
   }, []);
 
   const onDocumentLoadError = useCallback((error: Error) => {
@@ -65,31 +64,28 @@ const PDFViewer = () => {
     setTextLayerError(false);
   }, []);
 
-  const onPageLoadSuccess = useCallback(() => {
+  const onPageLoadSuccess = useCallback((pageNumber: number) => {
     console.log(`Page ${pageNumber} loaded successfully`);
-    setPageLoading(false);
-    setTextLayerError(false);
-  }, [pageNumber]);
+    setLoadedPages(prev => new Set([...prev, pageNumber]));
+  }, []);
 
-  const onPageLoadError = useCallback((error: Error) => {
+  const onPageLoadError = useCallback((error: Error, pageNumber: number) => {
     console.error(`Page ${pageNumber} load error:`, error);
-    setPageLoading(false);
-    // Don't show error for text layer issues, just disable text layer
     if (error.message.includes('sendWithStream') || error.message.includes('TextLayer')) {
       setTextLayerError(true);
     }
-  }, [pageNumber]);
+  }, []);
 
-  const onPageRenderSuccess = useCallback(() => {
+  const onPageRenderSuccess = useCallback((pageNumber: number) => {
     console.log(`Page ${pageNumber} rendered successfully`);
-  }, [pageNumber]);
+  }, []);
 
-  const onPageRenderError = useCallback((error: Error) => {
+  const onPageRenderError = useCallback((error: Error, pageNumber: number) => {
     console.error(`Page ${pageNumber} render error:`, error);
     if (error.message.includes('sendWithStream') || error.message.includes('TextLayer')) {
       setTextLayerError(true);
     }
-  }, [pageNumber]);
+  }, []);
 
   const handlePrint = () => {
     window.print();
@@ -101,16 +97,6 @@ const PDFViewer = () => {
 
   const handleZoomOut = () => {
     setScale(prev => Math.max(prev - 0.25, 0.5));
-  };
-
-  const handlePageChange = (page: number) => {
-    if (page >= 1 && page <= numPages && page !== pageNumber) {
-      console.log(`Changing to page ${page}`);
-      setPageLoading(true);
-      setPageNumber(page);
-      setTextLayerError(false); // Reset text layer error for new page
-      closeActionMenu();
-    }
   };
 
   const handleTextSelection = (e: React.MouseEvent) => {
@@ -218,22 +204,14 @@ const PDFViewer = () => {
   useEffect(() => {
     if (currentDocument) {
       setIsDocumentLoaded(false);
-      setPageNumber(1);
       setNumPages(0);
       setScale(1.0);
       setIsLoading(false);
       setError(null);
-      setPageLoading(false);
       closeActionMenu();
+      setLoadedPages(new Set());
     }
   }, [currentDocument]);
-
-  // Reset page loading when page number changes
-  useEffect(() => {
-    if (isDocumentLoaded) {
-      setPageLoading(true);
-    }
-  }, [pageNumber, isDocumentLoaded]);
 
   if (!currentDocument) {
     return (
@@ -264,8 +242,11 @@ const PDFViewer = () => {
             transition: background-color 0.2s ease !important;
           }
           .react-pdf__Page {
-            margin: 0 auto !important;
+            margin: 0 auto 20px auto !important;
             display: block !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+            border-radius: 8px !important;
+            overflow: hidden !important;
           }
           .react-pdf__Page__canvas {
             display: block !important;
@@ -277,45 +258,22 @@ const PDFViewer = () => {
       {/* PDF Controls */}
       <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-white to-gray-50 flex-shrink-0">
         <div className="flex items-center justify-between">
-          {/* Page Navigation */}
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={() => handlePageChange(pageNumber - 1)}
-              disabled={pageNumber <= 1 || !isDocumentLoaded || pageLoading}
-              className="p-2 rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronLeft className="h-5 w-5 text-gray-600" />
-            </button>
-            <div className="flex items-center space-x-2 bg-white rounded-lg border border-gray-200 px-3 py-1">
-              <input
-                type="number"
-                value={pageNumber}
-                onChange={(e) => handlePageChange(parseInt(e.target.value) || 1)}
-                className="w-12 text-sm text-center border-none outline-none"
-                min="1"
-                max={numPages}
-                disabled={!isDocumentLoaded || pageLoading}
-              />
-              <span className="text-sm text-gray-500">/ {numPages || 0}</span>
+          {/* Document Info */}
+          <div className="flex items-center space-x-4">
+            <div className="text-sm text-gray-600">
+              {currentDocument.name}
             </div>
-            <button
-              onClick={() => handlePageChange(pageNumber + 1)}
-              disabled={pageNumber >= numPages || !isDocumentLoaded || pageLoading}
-              className="p-2 rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronRight className="h-5 w-5 text-gray-600" />
-            </button>
-            {pageLoading && (
-              <div className="flex items-center space-x-2 text-sm text-blue-600">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                <span>Loading page...</span>
+            {isDocumentLoaded && (
+              <div className="text-sm text-gray-500">
+                {numPages} pages
               </div>
             )}
-          </div>
-
-          {/* Document Info */}
-          <div className="text-sm text-gray-600">
-            {currentDocument.name}
+            {isLoading && (
+              <div className="flex items-center space-x-2 text-sm text-blue-600">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                <span>Loading PDF...</span>
+              </div>
+            )}
           </div>
 
           {/* Zoom Controls */}
@@ -349,18 +307,16 @@ const PDFViewer = () => {
         </div>
       </div>
 
-      {/* PDF Display */}
+      {/* PDF Display - Vertical Scrollable */}
       <div className="flex-1 overflow-auto bg-gradient-to-br from-gray-50 to-blue-50 p-6 relative">
-        <div className="flex justify-center min-h-full">
+        <div className="flex justify-center">
           <ContextMenu>
             <ContextMenuTrigger>
               <div 
-                ref={pageRef}
-                className="pdf-container shadow-2xl rounded-lg overflow-hidden bg-white border border-gray-200 hover:shadow-3xl transition-shadow duration-300 mx-auto relative"
+                className="pdf-container max-w-fit mx-auto relative"
                 onMouseUp={handleTextSelection}
                 style={{
-                  cursor: selectedText ? 'pointer' : 'default',
-                  maxWidth: 'fit-content'
+                  cursor: selectedText ? 'pointer' : 'default'
                 }}
               >
                 <Document
@@ -386,25 +342,25 @@ const PDFViewer = () => {
                   }
                   options={pdfOptions}
                 >
-                  {isDocumentLoaded && (
+                  {isDocumentLoaded && Array.from(new Array(numPages), (el, index) => (
                     <Page
-                      key={`page_${pageNumber}_${scale}_${textLayerError ? 'no-text' : 'text'}`}
-                      pageNumber={pageNumber}
+                      key={`page_${index + 1}_${scale}_${textLayerError ? 'no-text' : 'text'}`}
+                      pageNumber={index + 1}
                       scale={scale}
-                      onLoadSuccess={onPageLoadSuccess}
-                      onLoadError={onPageLoadError}
-                      onRenderSuccess={onPageRenderSuccess}
-                      onRenderError={onPageRenderError}
+                      onLoadSuccess={() => onPageLoadSuccess(index + 1)}
+                      onLoadError={(error) => onPageLoadError(error, index + 1)}
+                      onRenderSuccess={() => onPageRenderSuccess(index + 1)}
+                      onRenderError={(error) => onPageRenderError(error, index + 1)}
                       loading={
-                        <div className="bg-white shadow-lg mx-auto flex items-center justify-center animate-pulse border border-gray-200 rounded" style={{ width: Math.max(612 * scale, 400), height: Math.max(792 * scale, 600) }}>
-                          <div className="text-gray-400">Loading page {pageNumber}...</div>
+                        <div className="bg-white shadow-lg mx-auto flex items-center justify-center animate-pulse border border-gray-200 rounded mb-5" style={{ width: Math.max(612 * scale, 400), height: Math.max(792 * scale, 600) }}>
+                          <div className="text-gray-400">Loading page {index + 1}...</div>
                         </div>
                       }
                       renderTextLayer={!textLayerError}
                       renderAnnotationLayer={!textLayerError}
                       className="pdf-page"
                     />
-                  )}
+                  ))}
                 </Document>
               </div>
             </ContextMenuTrigger>
