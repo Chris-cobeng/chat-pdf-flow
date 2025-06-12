@@ -23,6 +23,7 @@ const PDFViewer = () => {
   const [isDocumentLoaded, setIsDocumentLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pageLoading, setPageLoading] = useState(false);
   const pageRef = useRef<HTMLDivElement>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
 
@@ -49,6 +50,20 @@ const PDFViewer = () => {
     setIsDocumentLoaded(false);
   }, []);
 
+  const onPageLoadSuccess = useCallback(() => {
+    console.log(`Page ${pageNumber} loaded successfully`);
+    setPageLoading(false);
+  }, [pageNumber]);
+
+  const onPageLoadError = useCallback((error: Error) => {
+    console.error(`Page ${pageNumber} load error:`, error);
+    setPageLoading(false);
+  }, [pageNumber]);
+
+  const onPageRenderSuccess = useCallback(() => {
+    console.log(`Page ${pageNumber} rendered successfully`);
+  }, [pageNumber]);
+
   const handlePrint = () => {
     window.print();
   };
@@ -62,8 +77,11 @@ const PDFViewer = () => {
   };
 
   const handlePageChange = (page: number) => {
-    if (page >= 1 && page <= numPages) {
+    if (page >= 1 && page <= numPages && page !== pageNumber) {
+      console.log(`Changing to page ${page}`);
+      setPageLoading(true);
       setPageNumber(page);
+      closeActionMenu(); // Close any open menus when changing pages
     }
   };
 
@@ -177,9 +195,17 @@ const PDFViewer = () => {
       setScale(1.0);
       setIsLoading(false);
       setError(null);
+      setPageLoading(false);
       closeActionMenu();
     }
   }, [currentDocument]);
+
+  // Reset page loading when page number changes
+  useEffect(() => {
+    if (isDocumentLoaded) {
+      setPageLoading(true);
+    }
+  }, [pageNumber, isDocumentLoaded]);
 
   if (!currentDocument) {
     return (
@@ -209,6 +235,14 @@ const PDFViewer = () => {
           .react-pdf__Page__textContent span {
             transition: background-color 0.2s ease !important;
           }
+          .react-pdf__Page {
+            margin: 0 auto !important;
+            display: block !important;
+          }
+          .react-pdf__Page__canvas {
+            display: block !important;
+            margin: 0 auto !important;
+          }
         `}
       </style>
 
@@ -219,7 +253,7 @@ const PDFViewer = () => {
           <div className="flex items-center space-x-3">
             <button
               onClick={() => handlePageChange(pageNumber - 1)}
-              disabled={pageNumber <= 1 || !isDocumentLoaded}
+              disabled={pageNumber <= 1 || !isDocumentLoaded || pageLoading}
               className="p-2 rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeft className="h-5 w-5 text-gray-600" />
@@ -232,17 +266,23 @@ const PDFViewer = () => {
                 className="w-12 text-sm text-center border-none outline-none"
                 min="1"
                 max={numPages}
-                disabled={!isDocumentLoaded}
+                disabled={!isDocumentLoaded || pageLoading}
               />
               <span className="text-sm text-gray-500">/ {numPages || 0}</span>
             </div>
             <button
               onClick={() => handlePageChange(pageNumber + 1)}
-              disabled={pageNumber >= numPages || !isDocumentLoaded}
+              disabled={pageNumber >= numPages || !isDocumentLoaded || pageLoading}
               className="p-2 rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronRight className="h-5 w-5 text-gray-600" />
             </button>
+            {pageLoading && (
+              <div className="flex items-center space-x-2 text-sm text-blue-600">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                <span>Loading page...</span>
+              </div>
+            )}
           </div>
 
           {/* Document Info */}
@@ -320,15 +360,21 @@ const PDFViewer = () => {
                     cMapUrl: `//unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
                     cMapPacked: true,
                     standardFontDataUrl: `//unpkg.com/pdfjs-dist@${pdfjs.version}/standard_fonts/`,
+                    disableAutoFetch: false,
+                    disableStream: false,
                   }}
                 >
                   {isDocumentLoaded && (
                     <Page
+                      key={`page_${pageNumber}_${scale}`}
                       pageNumber={pageNumber}
                       scale={scale}
+                      onLoadSuccess={onPageLoadSuccess}
+                      onLoadError={onPageLoadError}
+                      onRenderSuccess={onPageRenderSuccess}
                       loading={
                         <div className="bg-white shadow-lg mx-auto flex items-center justify-center animate-pulse border border-gray-200 rounded" style={{ width: Math.max(612 * scale, 400), height: Math.max(792 * scale, 600) }}>
-                          <div className="text-gray-400">Loading page...</div>
+                          <div className="text-gray-400">Loading page {pageNumber}...</div>
                         </div>
                       }
                       renderTextLayer={true}
