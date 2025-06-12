@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Printer, MessageCircle, HelpCircle, FileText, X } from 'lucide-react';
 import { useStore } from '../store/useStore';
@@ -24,8 +24,20 @@ const PDFViewer = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pageLoading, setPageLoading] = useState(false);
+  const [textLayerError, setTextLayerError] = useState(false);
   const pageRef = useRef<HTMLDivElement>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
+
+  // Memoize PDF options to prevent unnecessary reloads
+  const pdfOptions = useMemo(() => ({
+    cMapUrl: `//unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
+    cMapPacked: true,
+    standardFontDataUrl: `//unpkg.com/pdfjs-dist@${pdfjs.version}/standard_fonts/`,
+    disableAutoFetch: false,
+    disableStream: false,
+    useSystemFonts: true,
+    verbosity: 0, // Reduce console noise
+  }), []);
 
   const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
     console.log('PDF loaded successfully with', numPages, 'pages');
@@ -34,6 +46,7 @@ const PDFViewer = () => {
     setIsDocumentLoaded(true);
     setIsLoading(false);
     setError(null);
+    setTextLayerError(false);
   }, []);
 
   const onDocumentLoadError = useCallback((error: Error) => {
@@ -41,6 +54,7 @@ const PDFViewer = () => {
     setIsDocumentLoaded(false);
     setIsLoading(false);
     setError('Failed to load PDF. Please try again.');
+    setTextLayerError(false);
   }, []);
 
   const onDocumentLoadStart = useCallback(() => {
@@ -48,20 +62,33 @@ const PDFViewer = () => {
     setIsLoading(true);
     setError(null);
     setIsDocumentLoaded(false);
+    setTextLayerError(false);
   }, []);
 
   const onPageLoadSuccess = useCallback(() => {
     console.log(`Page ${pageNumber} loaded successfully`);
     setPageLoading(false);
+    setTextLayerError(false);
   }, [pageNumber]);
 
   const onPageLoadError = useCallback((error: Error) => {
     console.error(`Page ${pageNumber} load error:`, error);
     setPageLoading(false);
+    // Don't show error for text layer issues, just disable text layer
+    if (error.message.includes('sendWithStream') || error.message.includes('TextLayer')) {
+      setTextLayerError(true);
+    }
   }, [pageNumber]);
 
   const onPageRenderSuccess = useCallback(() => {
     console.log(`Page ${pageNumber} rendered successfully`);
+  }, [pageNumber]);
+
+  const onPageRenderError = useCallback((error: Error) => {
+    console.error(`Page ${pageNumber} render error:`, error);
+    if (error.message.includes('sendWithStream') || error.message.includes('TextLayer')) {
+      setTextLayerError(true);
+    }
   }, [pageNumber]);
 
   const handlePrint = () => {
@@ -81,7 +108,8 @@ const PDFViewer = () => {
       console.log(`Changing to page ${page}`);
       setPageLoading(true);
       setPageNumber(page);
-      closeActionMenu(); // Close any open menus when changing pages
+      setTextLayerError(false); // Reset text layer error for new page
+      closeActionMenu();
     }
   };
 
@@ -356,29 +384,24 @@ const PDFViewer = () => {
                       </div>
                     </div>
                   }
-                  options={{
-                    cMapUrl: `//unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
-                    cMapPacked: true,
-                    standardFontDataUrl: `//unpkg.com/pdfjs-dist@${pdfjs.version}/standard_fonts/`,
-                    disableAutoFetch: false,
-                    disableStream: false,
-                  }}
+                  options={pdfOptions}
                 >
                   {isDocumentLoaded && (
                     <Page
-                      key={`page_${pageNumber}_${scale}`}
+                      key={`page_${pageNumber}_${scale}_${textLayerError ? 'no-text' : 'text'}`}
                       pageNumber={pageNumber}
                       scale={scale}
                       onLoadSuccess={onPageLoadSuccess}
                       onLoadError={onPageLoadError}
                       onRenderSuccess={onPageRenderSuccess}
+                      onRenderError={onPageRenderError}
                       loading={
                         <div className="bg-white shadow-lg mx-auto flex items-center justify-center animate-pulse border border-gray-200 rounded" style={{ width: Math.max(612 * scale, 400), height: Math.max(792 * scale, 600) }}>
                           <div className="text-gray-400">Loading page {pageNumber}...</div>
                         </div>
                       }
-                      renderTextLayer={true}
-                      renderAnnotationLayer={true}
+                      renderTextLayer={!textLayerError}
+                      renderAnnotationLayer={!textLayerError}
                       className="pdf-page"
                     />
                   )}
@@ -386,7 +409,7 @@ const PDFViewer = () => {
               </div>
             </ContextMenuTrigger>
             
-            {selectedText && (
+            {selectedText && !textLayerError && (
               <ContextMenuContent className="w-56">
                 <ContextMenuItem onClick={handleHighlight} className="cursor-pointer">
                   <div className="h-4 w-4 bg-yellow-300 rounded-sm mr-2"></div>
@@ -405,8 +428,15 @@ const PDFViewer = () => {
           </ContextMenu>
         </div>
 
+        {/* Show warning if text layer is disabled */}
+        {textLayerError && (
+          <div className="absolute top-4 right-4 bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-2 rounded-lg text-sm">
+            Text selection disabled for this PDF
+          </div>
+        )}
+
         {/* Floating Action Menu */}
-        {showActionMenu && (
+        {showActionMenu && !textLayerError && (
           <div
             ref={actionMenuRef}
             className="fixed z-50 bg-gray-800 rounded-xl shadow-2xl p-2 flex items-center space-x-1 transform -translate-x-1/2"
